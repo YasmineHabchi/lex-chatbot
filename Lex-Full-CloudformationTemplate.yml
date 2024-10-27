@@ -1,0 +1,587 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS CloudFormation template for deploying a Lex V2 bot integrated with Lambda and API Gateway'
+
+Parameters:
+  SourceBucket:
+    Type: String
+    Default: 'lex-bot-template'
+
+  StageForApi:
+    Type: String
+    Default: 'cloudformationstage'
+
+Resources:
+  # IAM Role for Lambda Functions and Lex Bot
+  IamRole:
+    Type: 'AWS::IAM::Role'
+    Properties: 
+      RoleName: 'LambdaLexRole'
+      AssumeRolePolicyDocument: 
+        Version: '2012-10-17'
+        Statement: 
+          - Effect: 'Allow'
+            Principal: 
+              Service: 
+                - 'lambda.amazonaws.com'
+                - 'lexv2.amazonaws.com'
+            Action: 
+              - 'sts:AssumeRole'
+      Policies: 
+        - PolicyName: 'FullAccessPolicies'
+          PolicyDocument: 
+            Version: '2012-10-17'
+            Statement: 
+              - Effect: 'Allow'
+                Action: 
+                  - 's3:*'
+                  - 'lex:*'
+                  - 'apigateway:Invoke'
+                  - 'apigateway:PushToCloudWatchLogs'
+                  - 'ec2:*'
+                  - 'cloudformation:*'
+                  - 'lambda:*'
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                  - 'polly:SynthesizeSpeech'
+                  - 'comprehend:DetectSentiment'
+                Resource: '*'
+        - PolicyName: "CrossAccountPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action: "sts:AssumeRole"
+                Resource: "arn:aws:iam::897652382521:role/AccessForLexBot"
+        - PolicyName: 'AdditionalPolicies'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: 'CloudWatchLogsAccess'
+                Effect: 'Allow'
+                Action: 
+                  - 'logs:CreateExportTask'
+                  - 'logs:DescribeLogStreams'
+                  - 'logs:GetLogEvents'
+                  - 'logs:DescribeExportTasks'
+                Resource: '*'
+              - Sid: 'S3Access'
+                Effect: 'Allow'
+                Action: 
+                  - 's3:PutObject'
+                  - 's3:GetObject'
+                  - 's3:GetObjectVersion'
+                Resource: 'arn:aws:s3:::logstreams-bucket/*'
+              - Sid: 'S3ListBucket'
+                Effect: 'Allow'
+                Action: 's3:ListBucket'
+                Resource: 'arn:aws:s3:::logstreams-bucket'
+  # Lex Bot Version
+  LexBotVersion:
+    DependsOn: LexBot
+    Type: 'AWS::Lex::BotVersion'
+    Properties:
+      BotId: !Ref LexBot
+      BotVersionLocaleSpecification:
+        - LocaleId: 'en_US'
+          BotVersionLocaleDetails:
+            SourceBotVersion: 'DRAFT'
+      Description: 'myfirstbot Version'
+
+  # Lex Bot
+  LexBot:
+    Type: 'AWS::Lex::Bot'
+    Properties:
+      Name: 'myfirstbot'
+      RoleArn: !GetAtt IamRole.Arn
+      DataPrivacy:
+        ChildDirected: false
+      IdleSessionTTLInSeconds: 300
+      BotLocales:
+        - LocaleId: 'en_US'
+          Description: 'English bot'
+          NluConfidenceThreshold: 0.40
+          VoiceSettings:
+            VoiceId: 'Joanna'
+          SlotTypes:
+            - Name: 'InstanceTypeValues'
+              Description: 'Slot type for EC2 instance types'
+              ValueSelectionSetting:
+                ResolutionStrategy: 'ORIGINAL_VALUE'
+              SlotTypeValues:
+                - SampleValue: 
+                    Value: 't3a.nano'
+                - SampleValue: 
+                    Value: 't2.micro'
+            - Name: 'Account'
+              Description: 'Account name'
+              ValueSelectionSetting:
+                ResolutionStrategy: 'ORIGINAL_VALUE'
+              SlotTypeValues:
+                - SampleValue: 
+                    Value: 'sandbox'
+                - SampleValue: 
+                    Value: 'move2aws'
+            - Name: 'AMIValues'
+              Description: 'Slot type for AMIs'
+              ValueSelectionSetting:
+                ResolutionStrategy: 'ORIGINAL_VALUE'
+              SlotTypeValues:
+                - SampleValue: 
+                    Value: 'ami-08a0d1e16fc3f61ea'
+                - SampleValue: 
+                    Value: 'AMIValues_example2'
+            - Name: 'KeyPairValues'
+              Description: 'Slot type for key pairs'
+              ValueSelectionSetting:
+                ResolutionStrategy: 'ORIGINAL_VALUE'
+              SlotTypeValues:
+                - SampleValue: 
+                    Value: 'keytrial'
+                - SampleValue: 
+                    Value: 'KeyPairValues_example2'
+            - Name: 'SecurityGroupValues'
+              Description: 'Slot type for security groups'
+              ValueSelectionSetting:
+                ResolutionStrategy: 'ORIGINAL_VALUE'
+              SlotTypeValues:
+                - SampleValue: 
+                    Value: 'sg-031b74fe386c863f1'
+                - SampleValue: 
+                    Value: 'SecurityGroupValues_example2'
+            - Name: 'SubnetValues'
+              Description: 'Slot type for subnets'
+              ValueSelectionSetting:
+                ResolutionStrategy: 'ORIGINAL_VALUE'
+              SlotTypeValues:
+                - SampleValue: 
+                    Value: 'subnet-0177dbf0afb719a30'
+                - SampleValue: 
+                    Value: 'SubnetValues_example2'
+            - Name: 'lognameSlotType'
+              Description: 'Slot type for log roup name'
+              ValueSelectionSetting:
+                ResolutionStrategy: 'ORIGINAL_VALUE'
+              SlotTypeValues:
+                - SampleValue: 
+                    Value: 'LexDispatcher'
+                - SampleValue: 
+                    Value: 'ListS3Buckets'
+                - SampleValue: 
+                    Value: 'LaunchEC2Instance'
+                - SampleValue: 
+                    Value: 'MyApi'
+            - Name: 'awsresourceSlotType'
+              Description: 'Slot type for the aws resource'
+              ValueSelectionSetting:
+                ResolutionStrategy: 'ORIGINAL_VALUE'
+              SlotTypeValues:
+                - SampleValue: 
+                    Value: 'lambda'
+                - SampleValue: 
+                    Value: 'apigateway'
+          Intents:
+            - Name: 'LaunchEC2Instance'
+              Description: 'Intent to launch EC2 instance'
+              SampleUtterances:
+                - Utterance: 'launch an ec2 instance'
+                - Utterance: 'start a new ec2 instance'
+                - Utterance: 'run an ec2 instance'
+                - Utterance: 'create an ec2 instance'
+                - Utterance: 'build an ec2 instance'
+              FulfillmentCodeHook:
+                Enabled: true
+              SlotPriorities:
+                - Priority: 1
+                  SlotName: InstanceType
+                - Priority: 2
+                  SlotName: AMI
+                - Priority: 3
+                  SlotName: KeyPair
+                - Priority: 4
+                  SlotName: SecurityGroup
+                - Priority: 5
+                  SlotName: Subnet
+              Slots:
+                - Name: 'InstanceType'
+                  SlotTypeName: 'InstanceTypeValues'
+                  ValueElicitationSetting:
+                    SlotConstraint: 'Required'
+                    PromptSpecification:
+                      MaxRetries: 2
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: 'What type of instance would you like? (e.g., t3a.nano, t2.micro)'
+                - Name: 'AMI'
+                  SlotTypeName: 'AMIValues'
+                  ValueElicitationSetting:
+                    SlotConstraint: 'Required'
+                    PromptSpecification:
+                      MaxRetries: 2
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: 'Which AMI would you like to use? (e.g., ami-08a0d1e16fc3f61ea)'
+                - Name: 'KeyPair'
+                  SlotTypeName: 'KeyPairValues'
+                  ValueElicitationSetting:
+                    SlotConstraint: 'Required'
+                    PromptSpecification:
+                      MaxRetries: 2
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: 'Which key pair would you like to use? (e.g., keytrial)'
+                - Name: 'SecurityGroup'
+                  SlotTypeName: 'SecurityGroupValues'
+                  ValueElicitationSetting:
+                    SlotConstraint: 'Required'
+                    PromptSpecification:
+                      MaxRetries: 2
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: 'Which security group would you like to use? (e.g., sg-031b74fe386c863f1)'
+                - Name: 'Subnet'
+                  SlotTypeName: 'SubnetValues'
+                  ValueElicitationSetting:
+                    SlotConstraint: 'Required'
+                    PromptSpecification:
+                      MaxRetries: 2
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: 'Which subnet would you like to use? (e.g., subnet-0177dbf0afb719a30)'
+            - Name: 'GetEC2InstanceInfo'
+              Description: 'Intent to get EC2 instance information'
+              SampleUtterances:
+                - Utterance: 'tell me about the ec2 instance with {InstanceID}'
+                - Utterance: 'what are the details for ec2 instance {InstanceID}'
+                - Utterance: 'get information on ec2 instance id {InstanceID}'
+              FulfillmentCodeHook:
+                Enabled: true
+              SlotPriorities:
+                - Priority: 1
+                  SlotName: InstanceID  
+              Slots:
+                - Name: 'InstanceID'
+                  SlotTypeName: 'AMAZON.AlphaNumeric'
+                  ValueElicitationSetting:
+                    SlotConstraint: 'Required'
+                    PromptSpecification:
+                      MaxRetries: 2
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: 'What is the ID of the EC2 instance?'
+            - Name: 'ListS3Buckets'
+              Description: 'Intent to list S3 buckets'
+              SampleUtterances:
+                - Utterance: 'S3 buckets'
+                - Utterance: 'list all S3 buckets'
+                - Utterance: 'show me the S3 buckets'
+                - Utterance: 'what are my S3 buckets'
+              FulfillmentCodeHook:
+                Enabled: true
+              SlotPriorities:
+                - Priority: 1
+                  SlotName: AccountName  
+              Slots:
+                - Name: 'AccountName'
+                  SlotTypeName: 'Account'
+                  ValueElicitationSetting:
+                    SlotConstraint: 'Required'
+                    PromptSpecification:
+                      MaxRetries: 2
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: 'In which account? (e.g., sandbox, move2aws)'
+            - Name: 'Accesslogs'
+              Description: 'Intent to access the log streams of an aws resource'
+              SampleUtterances:
+                - Utterance: 'list log groups'
+                - Utterance: 'list log streams'
+                
+              FulfillmentCodeHook:
+                Enabled: true
+              SlotPriorities:
+                - Priority: 1
+                  SlotName: LogGroupName
+                - Priority: 2
+                  SlotName: awsresource
+                - Priority: 3
+                  SlotName: StartTime
+                - Priority: 4
+                  SlotName: EndTime
+                
+              Slots:
+                - Name: 'LogGroupName'
+                  SlotTypeName: 'lognameSlotType'
+                  ValueElicitationSetting:
+                    SlotConstraint: 'Required'
+                    PromptSpecification:
+                      MaxRetries: 2
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: 'provide you Log group name please'
+                - Name: 'awsresource'
+                  SlotTypeName: 'awsresourceSlotType'
+                  ValueElicitationSetting:
+                    SlotConstraint: 'Required'
+                    PromptSpecification:
+                      MaxRetries: 2
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: 'provide the aws resource please'
+                - Name: 'StartTime'
+                  SlotTypeName: 'AMAZON.Date'
+                  ValueElicitationSetting:
+                    SlotConstraint: 'Required'
+                    PromptSpecification:
+                      MaxRetries: 2
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: 'provide the start date please'
+                - Name: 'EndTime'
+                  SlotTypeName: 'AMAZON.Date'
+                  ValueElicitationSetting:
+                    SlotConstraint: 'Required'
+                    PromptSpecification:
+                      MaxRetries: 2
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: 'provide the end date please'
+            - Name: 'FallbackIntent'
+              Description: 'Fallback intent to handle unrecognized inputs'
+              ParentIntentSignature: 'AMAZON.FallbackIntent'
+  # S3 Bucket for log streams
+  LogStreamsBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: 'logstreams-bucket'
+      
+  LogStreamsBucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Ref LogStreamsBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service: 'logs.amazonaws.com'
+            Action:
+              - 's3:GetBucketAcl'
+              - 's3:PutObject'
+            Resource:
+              - !Sub 'arn:aws:s3:::logstreams-bucket'
+              - !Sub 'arn:aws:s3:::logstreams-bucket/*'
+  # Lambda Layer
+  MyLambdaLayer:
+    Type: 'AWS::Lambda::LayerVersion'
+    Properties:
+      LayerName: 'requests-layer'
+      Description: 'A layer for Request module for the Accesslogs lambda function'
+      Content:
+        S3Bucket: !Ref SourceBucket
+        S3Key: 'lambda-layer.zip'
+      CompatibleRuntimes:
+        - 'python3.9'
+  # Lex Bot Alias
+  LexBotAlias:
+    DependsOn: LexBotVersion
+    Type: 'AWS::Lex::BotAlias'
+    Properties:
+      BotAliasName: 'BotAlias'
+      BotId: !Ref LexBot
+      BotVersion: !GetAtt LexBotVersion.BotVersion
+      BotAliasLocaleSettings:
+        - LocaleId: en_US
+          BotAliasLocaleSetting:
+            CodeHookSpecification:
+              LambdaCodeHook:
+                CodeHookInterfaceVersion: 1.0
+                LambdaArn: !GetAtt LexDispatcher.Arn
+            Enabled: true
+          
+  # Lambda Function for API Gateway
+  LambdaFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: 'TeamsToLex'
+      Handler: 'TeamsToLex.lambda_handler'
+      Role: !GetAtt IamRole.Arn
+      Environment:
+        Variables:
+          ALIAS_ID_BOT_ID: !Ref LexBotAlias
+
+      Code:
+        S3Bucket: !Ref SourceBucket
+        S3Key: 'TeamsToLex.zip'
+      Runtime: 'python3.12'
+      Timeout: 30
+
+
+  # Lambda Function for Lex Router (fulfilment)
+  LexDispatcher:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: 'LexDispatcher'
+      Handler: 'LexDispatcher.lambda_handler'
+      Role: !GetAtt IamRole.Arn
+      Code:
+        S3Bucket: !Ref SourceBucket
+        S3Key: 'LexDispatcher.zip'
+      Runtime: 'python3.12'
+      Timeout: 120
+
+  LambdaInvokePermissionTest:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      FunctionName: !Ref LexDispatcher
+      Action: 'lambda:InvokeFunction'
+      Principal: 'lexv2.amazonaws.com'
+      SourceArn: !Sub 'arn:aws:lex:${AWS::Region}:${AWS::AccountId}:bot-alias/${LexBot}/*'
+
+
+
+  #########################################lambdas#################################################
+
+  LaunchEC2Instance:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: 'LaunchEC2Instance'
+      Handler: 'LaunchEC2Instance.lambda_handler'
+      Role: !GetAtt IamRole.Arn
+      Code:
+        S3Bucket: !Ref SourceBucket
+        S3Key: 'LaunchEC2Instance.zip'
+      Runtime: 'python3.12'
+      Timeout: 30
+
+  LaunchEC2InstanceInvokePermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      FunctionName: !Ref LaunchEC2Instance
+      Action: 'lambda:InvokeFunction'
+      Principal: 'lexv2.amazonaws.com'
+      SourceArn: !GetAtt LexDispatcher.Arn
+
+
+  ListS3Buckets:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: 'ListS3Buckets'
+      Handler: 'ListS3Buckets.lambda_handler'
+      Role: !GetAtt IamRole.Arn
+      Code:
+        S3Bucket: !Ref SourceBucket
+        S3Key: 'ListS3Buckets.zip'
+      Runtime: 'python3.12'
+      Timeout: 30
+
+  ListS3BucketsInvokePermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      FunctionName: !Ref ListS3Buckets
+      Action: 'lambda:InvokeFunction'
+      Principal: 'lexv2.amazonaws.com'
+      SourceArn: !GetAtt LexDispatcher.Arn
+
+  Accesslogs:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: 'Accesslogs'
+      Handler: 'Accesslogs.lambda_handler'
+      Role: !GetAtt IamRole.Arn
+      Code:
+        S3Bucket: !Ref SourceBucket
+        S3Key: 'Accesslogs.zip'
+      Runtime: 'python3.9'
+      Timeout: 120
+      Layers:
+        - !Ref MyLambdaLayer
+      Environment:
+        Variables:
+          LOG_STREAMS_BUCKET: !Ref LogStreamsBucket
+
+  AccesslogsInvokePermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      FunctionName: !Ref Accesslogs
+      Action: 'lambda:InvokeFunction'
+      Principal: 'lexv2.amazonaws.com'
+      SourceArn: !GetAtt LexDispatcher.Arn
+  ##########################################################################################
+
+
+  # API Gateway
+  ApiGateway:
+    Type: 'AWS::ApiGateway::RestApi'
+    Properties:
+      Name: 'MyApi'
+      Description: 'API Gateway for Lex and Lambda integration'
+
+  # Lambda Invoke Permission for API Gateway
+  LambdaInvokePermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !GetAtt LambdaFunction.Arn
+      Principal: 'apigateway.amazonaws.com'
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*/POST/TeamsToLex"
+
+  # API Gateway Resource
+  ApiResource:
+    Type: 'AWS::ApiGateway::Resource'
+    Properties:
+      ParentId: !GetAtt ApiGateway.RootResourceId
+      PathPart: 'TeamsToLex'
+      RestApiId: !Ref ApiGateway
+
+  # API Gateway Method
+  ApiMethod:
+    Type: 'AWS::ApiGateway::Method'
+    Properties:
+      AuthorizationType: 'NONE'
+      HttpMethod: 'POST'
+      ResourceId: !Ref ApiResource
+      RestApiId: !Ref ApiGateway
+      Integration:
+        IntegrationHttpMethod: 'POST'
+        Type: 'AWS_PROXY'
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaFunction.Arn}/invocations'
+
+  # API Gateway Deployment
+  ApiDeployment:
+    Type: 'AWS::ApiGateway::Deployment'
+    DependsOn: ApiMethod
+    Properties:
+      RestApiId: !Ref ApiGateway
+      StageName: 'prod'
+
+  # API Gateway Stage
+  ApiStage:
+    Type: 'AWS::ApiGateway::Stage'
+    Properties:
+      DeploymentId: !Ref ApiDeployment
+      RestApiId: !Ref ApiGateway
+      StageName: !Ref StageForApi
+      MethodSettings:
+      - LoggingLevel: INFO
+        ResourcePath: '/*'
+        HttpMethod: '*'
+
+  
+
+
+Outputs:
+  PostUrl:
+    Description: "POST URL for invoking the bot via API Gateway"
+    Value: !Sub "https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${StageForApi}/TeamsToLex"

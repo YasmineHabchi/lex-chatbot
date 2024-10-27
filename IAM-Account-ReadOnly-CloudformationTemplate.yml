@@ -1,0 +1,22 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "CloudFormation template to create an IAM role with ReadOnlyAccess policy for cross-account access"
+
+Parameters:
+  ExternalAccountId:
+    Type: String
+    Description: "The AWS Account ID of the external account that will assume this role"
+
+Resources:
+  ReadOnlyRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: "AccessForLexBot"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              AWS: !Sub "arn:aws:iam::${ExternalAccountId}:role/LambdaLexRole"
+            Action: "sts:AssumeRole"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/ReadOnlyAccess"
